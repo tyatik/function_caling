@@ -19,8 +19,8 @@ SYSTEM_PROMPT = (
 S_B, S_E = "<s>", "</s>"
 INST_B, INST_E = "[INST] ", " [/INST] "
 SYS_B, SYS_E = "<<SYS>>\n", "\n<</SYS>>\n\n"
-TOOL_CALL_S, TOOL_CALL_E = "<TOOL_CALL>\n", "\n</TOOL_CALL>\n\n"
-TOOL_RESPONSE_S, TOOL_RESPONSE_E = "<TOOL_RESPONSE>\n", "\n</TOOL_RESPONSE>\n\n"
+TOOL_CALL_B, TOOL_CALL_E = "<TOOL_CALL>\n", "\n</TOOL_CALL>\n\n"
+TOOL_RESPONSE_B, TOOL_RESPONSE_E = "<TOOL_RESPONSE>\n", "\n</TOOL_RESPONSE>\n\n"
 
 
 def convert(messages: List[Dict[str, Any]], functions: List[str]) -> str:
@@ -40,11 +40,11 @@ def convert(messages: List[Dict[str, Any]], functions: List[str]) -> str:
             messages_string.append(message["content"])
             messages_string.append(S_E)
         elif message["role"] == "function_call":
-            messages_string.append(TOOL_CALL_S)
+            messages_string.append(TOOL_CALL_B)
             messages_string.append(message["content"])
             messages_string.append(TOOL_CALL_E)
         elif message["role"] == "function_response":
-            messages_string.append(TOOL_RESPONSE_S)
+            messages_string.append(TOOL_RESPONSE_B)
             messages_string.append(message["content"])
             messages_string.append(TOOL_RESPONSE_E)
     
