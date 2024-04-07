@@ -7,6 +7,7 @@ from tqdm import tqdm
 import src.utils.data.formats as formats
 
 FORMAT_TO_FUNC = {
+    "raw": lambda messages, functions: json.dumps({"messages": messages, "functions": functions}),
     "llama": formats.llama_convert
 }
 
