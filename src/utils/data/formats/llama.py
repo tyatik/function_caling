@@ -52,4 +52,4 @@ def convert(messages: List[Dict[str, Any]], functions: List[str]) -> str:
             messages_string.append(message["content"])
             messages_string.append(TOOL_RESPONSE_E)
     
-    return "".join(messages_string)
+    return {"text": "".join(messages_string)}
