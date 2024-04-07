@@ -11,7 +11,7 @@ SYSTEM_PROMPT = (
     "For each function call, return a JSON object with the function name and arguments within <TOOL_CALL></TOOL_CALL> XML tags as follows:\n"
     "<TOOL_CALL>\n"
     "{{\"name\": <function-name>, \"arguments\": <args-dict>}}\n"
-    "</TOOL_CALL>"
+    "</TOOL_CALL>\n"
     "You will get function call result within <TOOL_RESPONSE></TOOL_RESPONSE> XML tags. "
     "Answer user query based on the result."
 )
@@ -29,6 +29,10 @@ def convert(messages: List[Dict[str, Any]], functions: List[str]) -> str:
 
     messages_string = [S_B, INST_B]
     for message in messages:
+        if messages_string[-1] == S_E:
+            messages_string.append(S_B)
+            messages_string.append(INST_B)
+
         if message["role"] == "system":
             messages_string.append(SYS_B)
             messages_string.append(message["content"])
