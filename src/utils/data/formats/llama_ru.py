@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 import json
 from torch.nn.modules.pixelshuffle import F
 from transformers import AutoModelForCausalLM, AutoTokenizer, T5ForConditionalGeneration, T5Tokenizer
+from transformers.models import patchtsmixer
 from tqdm.notebook import tqdm
 
 SYSTEM_PROMPT = (
@@ -118,32 +119,35 @@ def convert(messages: List[str], functions: List[str]) -> List[str]:
       f_link = f_dicts_base[path[0]][path[1]]
       set_value_by_path(f_link, path[2], text)
     
-    tools = ",\n".join([json.dumps(function, indent=4) for function in functions])
-    messages[0]["content"] = SYSTEM_PROMPT.format(tools=tools)
-    
-    messages_string = [S_B, INST_B]
-    for message in messages:
-        if messages_string[-1] == S_E:
-            messages_string.append(S_B)
-            messages_string.append(INST_B)
+    result = {"text":[]}
+    for local_messages, local_functions in zip(m_dicts_base, f_dicts_base):
+      tools = ",\n".join([json.dumps(function, indent=4) for function in local_functions])
+      messages[0]["content"] = SYSTEM_PROMPT.format(tools=tools)
+      
+      messages_string = [S_B, INST_B]
+      for message in local_messages:
+          if messages_string[-1] == S_E:
+              messages_string.append(S_B)
+              messages_string.append(INST_B)
 
-        if message["role"] == "system":
-            messages_string.append(SYS_B)
-            messages_string.append(message["content"])
-            messages_string.append(SYS_E)
-        elif message["role"] == "user":
-            messages_string.append(message["content"])
-            messages_string.append(INST_E)
-        elif message["role"] == "assistant":
-            messages_string.append(message["content"])
-            messages_string.append(S_E)
-        elif message["role"] == "function_call":
-            messages_string.append(TOOL_CALL_B)
-            messages_string.append(message["content"])
-            messages_string.append(TOOL_CALL_E)
-        elif message["role"] == "function_response":
-            messages_string.append(TOOL_RESPONSE_B)
-            messages_string.append(message["content"])
-            messages_string.append(TOOL_RESPONSE_E)
+          if message["role"] == "system":
+              messages_string.append(SYS_B)
+              messages_string.append(message["content"])
+              messages_string.append(SYS_E)
+          elif message["role"] == "user":
+              messages_string.append(message["content"])
+              messages_string.append(INST_E)
+          elif message["role"] == "assistant":
+              messages_string.append(message["content"])
+              messages_string.append(S_E)
+          elif message["role"] == "function_call":
+              messages_string.append(TOOL_CALL_B)
+              messages_string.append(message["content"])
+              messages_string.append(TOOL_CALL_E)
+          elif message["role"] == "function_response":
+              messages_string.append(TOOL_RESPONSE_B)
+              messages_string.append(message["content"])
+              messages_string.append(TOOL_RESPONSE_E)
+      result["text"].append("".join(messages_string))
     
-    return {"text": "".join(messages_string)}
+    return result
