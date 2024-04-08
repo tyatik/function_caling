@@ -1,9 +1,9 @@
 from typing import List, Dict, Any
 import json
 from torch.nn.modules.pixelshuffle import F
-from transformers import AutoModelForCausalLM, AutoTokenizer, T5ForConditionalGeneration, T5Tokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, T5ForConditionalGeneration, T5Tokenizer
 from transformers.models import patchtsmixer
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 
 SYSTEM_PROMPT = (
     "Ты - незаменимый помощник, выполняющий задачу вызова функции. Тебе предоставлены сигнатуры функций, заключенные в xml теги <TOOLS></TOOLS>"
@@ -54,7 +54,7 @@ def create_batches(m_texts, batch_size):
   batch = []
   for i in range(len(m_texts)):
     batch.append(m_texts[i])
-    if (i + 1) % batch_size == 0 or i == len(m_texts - 1):
+    if (i + 1) % batch_size == 0 or i == len(m_texts) - 1:
       m_text_batches.append(batch)
       batch = []
   return m_text_batches
@@ -62,7 +62,7 @@ def create_batches(m_texts, batch_size):
 def translate_batches(batches, tokenizer, model, device, desc):
   batches_ru = []
   for b in tqdm(batches, desc=desc):
-    input_ids = tokenizer(b, return_tensors="pt")
+    input_ids = tokenizer(b, return_tensors="pt", padding="max_length", truncation=True)
     generated_tokens = model.generate(**input_ids.to(device))
     result = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
     batches_ru.append(result)
@@ -70,15 +70,15 @@ def translate_batches(batches, tokenizer, model, device, desc):
 
 def convert(messages: List[str], functions: List[str]) -> List[str]:
     m_dicts_base = [json.loads(m) for m in messages]
-    m_paths_base = [[m, d] for m in range(len(m_dicts_base)) for d in range(len(m))]
+    m_paths_base = [[m, d] for m in range(len(m_dicts_base)) for d in range(len(m_dicts_base[m]))]
     m_texts = [d["content"] for m in m_dicts_base for d in m]
 
     f_dicts_base = [json.loads(f) for f in functions]
-    f_paths_base = [[f, d] for f in range(len(f_dicts_base)) for d in range(len(f))]
+    f_paths_base = [[f, d] for f in range(len(f_dicts_base)) for d in range(len(f_dicts_base[f]))]
     f_descriptions = [d["description"] for f in f_dicts_base for d in f]
 
     p_paths_base = [[i, j, p] for i, f in enumerate(f_dicts_base) for j, d in enumerate(f) for p in paths_to_key(d, "description")]
-    p_descriptions = [value_by_path(d, p) for f in f_dicts_base for d in f for p in d]
+    p_descriptions = [value_by_path(f_dicts_base[i][j], p) for i, j, p in p_paths_base]
 
     with open("/content/function_caling/src/utils/data/formats/llama_ru_config.json", "r") as fp:
         config = json.load(fp)
@@ -88,13 +88,15 @@ def convert(messages: List[str], functions: List[str]) -> List[str]:
     m_text_batches = create_batches(m_texts, batch_size)
     f_description_batches = create_batches(f_descriptions, batch_size)
     p_description_batches = create_batches(p_descriptions, batch_size)
+    
 
-    model = T5ForConditionalGeneration.from_pretrained(config["model_name"])
+    model = AutoModelForSeq2SeqLM.from_pretrained(config["model_name"])
     device = config["device"]
     model.to(device)
 
-    tokenizer = T5Tokenizer.from_pretrained(config["model_name"])
+    tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
     prefix = 'translate to ru: '
+    prefix = ""
 
     m_text_batches_ru = translate_batches(m_text_batches, tokenizer, model, device, "Translating messages")
     m_text_ru = [el for b in m_text_batches_ru for el in b]
@@ -122,7 +124,7 @@ def convert(messages: List[str], functions: List[str]) -> List[str]:
     result = {"text":[]}
     for local_messages, local_functions in zip(m_dicts_base, f_dicts_base):
       tools = ",\n".join([json.dumps(function, indent=4) for function in local_functions])
-      messages[0]["content"] = SYSTEM_PROMPT.format(tools=tools)
+      local_messages[0]["content"] = SYSTEM_PROMPT.format(tools=tools)
       
       messages_string = [S_B, INST_B]
       for message in local_messages:
@@ -149,5 +151,4 @@ def convert(messages: List[str], functions: List[str]) -> List[str]:
               messages_string.append(message["content"])
               messages_string.append(TOOL_RESPONSE_E)
       result["text"].append("".join(messages_string))
-    
     return result
