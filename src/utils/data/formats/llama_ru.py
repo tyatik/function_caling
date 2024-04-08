@@ -1,6 +1,8 @@
 from typing import List, Dict, Any
 import json
+from torch.nn.modules.pixelshuffle import F
 from transformers import AutoModelForCausalLM, AutoTokenizer, T5ForConditionalGeneration, T5Tokenizer
+from tqdm.notebook import tqdm
 
 SYSTEM_PROMPT = (
     "Ты - незаменимый помощник, выполняющий задачу вызова функции. Тебе предоставлены сигнатуры функций, заключенные в xml теги <TOOLS></TOOLS>"
@@ -23,12 +25,68 @@ SYS_B, SYS_E = "<<SYS>>\n", "\n<</SYS>>\n\n"
 TOOL_CALL_B, TOOL_CALL_E = "<TOOL_CALL>\n", "\n</TOOL_CALL>\n\n"
 TOOL_RESPONSE_B, TOOL_RESPONSE_E = "<TOOL_RESPONSE>\n", "\n</TOOL_RESPONSE>\n\n"
 
+def paths_to_key(d, key):
+  paths = []
+  if key in d:
+    paths.append([key])
+  for k in d.keys():
+    if type(d[k]) == type({}):
+      local_paths = paths_to_key(d[k], key)
+      l_p_ex = [[k] + p for p in local_paths]
+      paths.extend(l_p_ex)
+  return paths
 
-def convert(messages: List[Dict[str, Any]], functions: List[str]) -> str:
-    tools = ",\n".join([json.dumps(function, indent=4) for function in functions])
-    messages[0]["content"] = SYSTEM_PROMPT.format(tools=tools)
-    with open("src/utils/data/formats/llama_ru_config.json", "r") as fp:
+def value_by_path(d, path):
+  el = d
+  for p in path:
+    el = el[p]
+  return el
+
+def set_value_by_path(d, path, value):
+  el = d
+  for p in path[:-1]:
+    el = el[p]
+  el[path[-1]] = value
+
+def create_batches(m_texts, batch_size):
+  m_text_batches = []
+  batch = []
+  for i in range(len(m_texts)):
+    batch.append(m_texts[i])
+    if (i + 1) % batch_size == 0 or i == len(m_texts - 1):
+      m_text_batches.append(batch)
+      batch = []
+  return m_text_batches
+
+def translate_batches(batches, tokenizer, model, device, desc):
+  batches_ru = []
+  for b in tqdm(batches, desc=desc):
+    input_ids = tokenizer(b, return_tensors="pt")
+    generated_tokens = model.generate(**input_ids.to(device))
+    result = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+    batches_ru.append(result)
+  return batches_ru
+
+def convert(messages: List[str], functions: List[str]) -> List[str]:
+    m_dicts_base = [json.loads(m) for m in messages]
+    m_paths_base = [[m, d] for m in range(len(m_dicts_base)) for d in range(len(m))]
+    m_texts = [d["content"] for m in m_dicts_base for d in m]
+
+    f_dicts_base = [json.loads(f) for f in functions]
+    f_paths_base = [[f, d] for f in range(len(f_dicts_base)) for d in range(len(f))]
+    f_descriptions = [d["description"] for f in f_dicts_base for d in f]
+
+    p_paths_base = [[i, j, p] for i, f in enumerate(f_dicts_base) for j, d in enumerate(f) for p in paths_to_key(d, "description")]
+    p_descriptions = [value_by_path(d, p) for f in f_dicts_base for d in f for p in d]
+
+    with open("/content/function_caling/src/utils/data/formats/llama_ru_config.json", "r") as fp:
         config = json.load(fp)
+
+    batch_size = config["batch_size"]
+
+    m_text_batches = create_batches(m_texts, batch_size)
+    f_description_batches = create_batches(f_descriptions, batch_size)
+    p_description_batches = create_batches(p_descriptions, batch_size)
 
     model = T5ForConditionalGeneration.from_pretrained(config["model_name"])
     device = config["device"]
@@ -37,6 +95,32 @@ def convert(messages: List[Dict[str, Any]], functions: List[str]) -> str:
     tokenizer = T5Tokenizer.from_pretrained(config["model_name"])
     prefix = 'translate to ru: '
 
+    m_text_batches_ru = translate_batches(m_text_batches, tokenizer, model, device, "Translating messages")
+    m_text_ru = [el for b in m_text_batches_ru for el in b]
+    f_description_batches_ru = translate_batches(f_description_batches, tokenizer, model, device, "Translating function descriptions")
+    f_descriptions_ru = [el for b in f_description_batches_ru for el in b]
+    p_description_batches_ru = translate_batches(p_description_batches, tokenizer, model, device, "Translating arg descriptions")
+    p_descriptions_ru = [el for b in p_description_batches_ru for el in b]
+
+    for i in range(len(m_paths_base)):
+      path = m_paths_base[i]
+      text = m_text_ru[i]
+      m_dicts_base[path[0]][path[1]]["content"] = text
+
+    for i in range(len(f_paths_base)):
+      path = f_paths_base[i]
+      text = f_descriptions_ru[i]
+      f_dicts_base[path[0]][path[1]]["description"] = text
+
+    for i in range(len(p_paths_base)):
+      path = p_paths_base[i]
+      text = p_descriptions_ru[i]
+      f_link = f_dicts_base[path[0]][path[1]]
+      set_value_by_path(f_link, path[2], text)
+    
+    tools = ",\n".join([json.dumps(function, indent=4) for function in functions])
+    messages[0]["content"] = SYSTEM_PROMPT.format(tools=tools)
+    
     messages_string = [S_B, INST_B]
     for message in messages:
         if messages_string[-1] == S_E:
@@ -45,31 +129,13 @@ def convert(messages: List[Dict[str, Any]], functions: List[str]) -> str:
 
         if message["role"] == "system":
             messages_string.append(SYS_B)
-            
-            text = prefix + message["content"]
-            input_ids = tokenizer(text, return_tensors="pt")
-            generated_tokens = model.generate(**input_ids.to(device))
-            result = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-            messages_string.append(result)
-
+            messages_string.append(message["content"])
             messages_string.append(SYS_E)
         elif message["role"] == "user":
-            
-            text = prefix + message["content"]
-            input_ids = tokenizer(text, return_tensors="pt")
-            generated_tokens = model.generate(**input_ids.to(device))
-            result = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-            messages_string.append(result)
-            
+            messages_string.append(message["content"])
             messages_string.append(INST_E)
         elif message["role"] == "assistant":
-            
-            text = prefix + message["content"]
-            input_ids = tokenizer(text, return_tensors="pt")
-            generated_tokens = model.generate(**input_ids.to(device))
-            result = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-            messages_string.append(result)
-            
+            messages_string.append(message["content"])
             messages_string.append(S_E)
         elif message["role"] == "function_call":
             messages_string.append(TOOL_CALL_B)

@@ -22,13 +22,11 @@ def convert_dataset(dataset, format: str):
     converted_dataset = datasets.DatasetDict()
     for part in ["train", "test"]:
         converted_dataset[part] = defaultdict(list)
+        messages = dataset[part]["messages"][:10]
+        functions = dataset[part]["functions"][:10]
 
-        for row in tqdm(dataset[part]):
-            messages = json.loads(row["messages"])
-            functions = json.loads(row["functions"])
-
-            for feature, value in FORMAT_TO_FUNC[format](messages, functions).items():
-                converted_dataset[part][feature].append(value)
+        for feature, value in FORMAT_TO_FUNC[format](messages, functions).items():
+            converted_dataset[part][feature] = value
         
         converted_dataset[part] = datasets.Dataset.from_dict(converted_dataset[part])
     
