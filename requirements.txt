@@ -1,2 +1,8 @@
+auto-gptq
+bitsandbytes
 datasets
+optimum
+peft
+torch==2.1
+transformers
 tqdm
