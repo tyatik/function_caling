@@ -39,19 +39,22 @@ def paths_to_key(d, key):
 
 def children_paths(d):
    paths = []
-   for k in d.keys():
-      if type(d[k]) == type({}):
-         local_paths = [[k] + p for p in children_paths(d[k])]
-         paths.extend(local_paths)
-      else:
-         paths.append([k])
+   if type(d) == type({}):
+    for k in d.keys():
+        if type(d[k]) == type({}) or type(d[k]) == type([]):
+          local_paths = [[k] + p for p in children_paths(d[k])]
+          paths.extend(local_paths)
+        else:
+          paths.append([k])
+   elif type(d) == type([]):
+    local_path = [[i] + p for i in range(len(d)) for p in children_paths(d[i])]
    return paths
 
 def value_by_path(d, path):
   el = d
   for p in path:
     el = el[p]
-  return el
+  return str(el)
 
 def set_value_by_path(d, path, value):
   el = d
@@ -89,13 +92,15 @@ def convert(messages: List[str], functions: List[str]) -> List[str]:
     for i, m in enumerate(m_dicts_base):
        for j, d in enumerate(m):
           if d["role"] == "function_call":
-             paths = [[i, j, p] for p in children_paths(d["content"]["arguments"])]
-             args = [value_by_path(d["content"]["arguments"], p[2]) for p in paths]
+             data = json.loads(d["content"])["arguments"]
+             paths = [[i, j, p] for p in children_paths(data)]
+             args = [value_by_path(data, p[2]) for p in paths]
              fc_paths_base.extend(paths)
              fc_args.extend(args)
           elif d["role"] == "function_response":
-             paths = [[i, j, p] for p in children_paths(d["content"])]
-             args = [value_by_path(d["content"], p[2]) for p in paths]
+             data = json.loads(d["content"])
+             paths = [[i, j, p] for p in children_paths(data)]
+             args = [value_by_path(data, p[2]) for p in paths]
              fr_paths_base.extend(paths)
              fr_args.extend(args)
           else:
@@ -132,9 +137,9 @@ def convert(messages: List[str], functions: List[str]) -> List[str]:
 
     m_text_batches_ru = translate_batches(m_text_batches, tokenizer, model, device, "Translating messages")
     m_text_ru = [el for b in m_text_batches_ru for el in b]
-    fc_args_batches_ru = translate_batches(fc_args_batches, tokenizer, model, device, "Translating messages")
+    fc_args_batches_ru = translate_batches(fc_args_batches, tokenizer, model, device, "Translating function calls")
     fc_args_ru = [el for b in fc_args_batches_ru for el in b]
-    fr_args_batches_ru = translate_batches(fr_args_batches, tokenizer, model, device, "Translating messages")
+    fr_args_batches_ru = translate_batches(fr_args_batches, tokenizer, model, device, "Translating function responses")
     fr_args_ru = [el for b in fr_args_batches_ru for el in b]
     f_description_batches_ru = translate_batches(f_description_batches, tokenizer, model, device, "Translating function descriptions")
     f_descriptions_ru = [el for b in f_description_batches_ru for el in b]
@@ -160,14 +165,18 @@ def convert(messages: List[str], functions: List[str]) -> List[str]:
     for i in range(len(fc_paths_base)):
       path = fc_paths_base[i]
       text = fc_args_ru[i]
-      f_link = m_dicts_base[path[0]][path[1]]
-      set_value_by_path(f_link, path[2], text)
+      f_link = json.loads(m_dicts_base[path[0]][path[1]]["content"])
+      if type(f_link) == type({}):
+        if "arguments" in f_link:
+          set_value_by_path(f_link["arguments"], path[2], text)
+      m_dicts_base[path[0]][path[1]]["content"] = json.dumps(f_link)
 
     for i in range(len(fr_paths_base)):
       path = fr_paths_base[i]
       text = fr_args_ru[i]
-      f_link = m_dicts_base[path[0]][path[1]]
+      f_link = json.loads(m_dicts_base[path[0]][path[1]]["content"])
       set_value_by_path(f_link, path[2], text)
+      m_dicts_base[path[0]][path[1]]["content"] = json.dumps(f_link)
     
     result = {"text":[]}
     for local_messages, local_functions in zip(m_dicts_base, f_dicts_base):
@@ -201,3 +210,4 @@ def convert(messages: List[str], functions: List[str]) -> List[str]:
       result["text"].append("".join(messages_string))
     
     return result
+

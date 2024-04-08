@@ -1,5 +1,5 @@
 {
     "model_name":"Helsinki-NLP/opus-mt-en-ru",
     "device":"cuda",
-    "batch_size":4
+    "batch_size":32
 }

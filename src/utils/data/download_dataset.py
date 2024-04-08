@@ -4,7 +4,7 @@ sys.path.append("./")
 import argparse
 import datasets
 
-from src.utils.data.formats import convert_dataset
+from formats import convert_dataset
 
 
 if __name__ == "__main__":
@@ -21,7 +21,7 @@ if __name__ == "__main__":
     converted_dataset = convert_dataset(
         dataset=hf_dataset,
         format=args.format,
-        push_n=args.push_n
+        push_n=int(args.push_n)
     )
 
     # Save dataset to disk
