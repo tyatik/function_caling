@@ -1,0 +1,4 @@
+{
+    "model_name":"utrobinmv/t5_translate_en_ru_zh_large_1024",
+    "device":"cuda"
+}

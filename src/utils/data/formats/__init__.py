@@ -5,10 +5,12 @@ import datasets
 from tqdm import tqdm
 
 from .llama import convert as llama_convert
+from .llama_ru import convert as llama_ru_convert
 
 FORMAT_TO_FUNC = {
     "raw": lambda messages, functions: json.dumps({"messages": messages, "functions": functions}),
-    "llama": llama_convert
+    "llama": llama_convert,
+    "llama_ru": llama_ru_convert
 }
 
 
