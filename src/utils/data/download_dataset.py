@@ -11,6 +11,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--path", type=str, default="data/dataset", help="Path to folder")
     parser.add_argument("-f", "--format", type=str, default="llama", help="Dataset format")
+    parser.add_argument("-n", "--push_n", type=str, default="llama", help="Push to hub every n samples")
     args = parser.parse_args()
 
     # Download raw huggingface dataset
@@ -20,6 +21,7 @@ if __name__ == "__main__":
     converted_dataset = convert_dataset(
         dataset=hf_dataset,
         format=args.format,
+        push_n=args.push_n
     )
 
     # Save dataset to disk

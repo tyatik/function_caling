@@ -1,5 +1,5 @@
 {
-    "model_name":"utrobinmv/t5_translate_en_ru_zh_large_1024",
+    "model_name":"Helsinki-NLP/opus-mt-en-ru",
     "device":"cuda",
     "batch_size":4
 }

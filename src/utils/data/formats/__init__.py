@@ -14,7 +14,7 @@ FORMAT_TO_FUNC = {
 }
 
 
-def convert_dataset(dataset, format: str):
+def convert_dataset(dataset, format: str, push_n: int = 100):
     if format not in FORMAT_TO_FUNC:
         raise ValueError(f"Format must be one of: {list(FORMAT_TO_FUNC.keys())}, got '{format}'")
 
@@ -25,9 +25,22 @@ def convert_dataset(dataset, format: str):
         messages = dataset[part]["messages"]
         functions = dataset[part]["functions"]
 
-        for feature, value in FORMAT_TO_FUNC[format](messages, functions).items():
-            converted_dataset[part][feature] = value
-        
-        converted_dataset[part] = datasets.Dataset.from_dict(converted_dataset[part])
-    
+        step = 0
+        for i in range(len(dataset[part]["messages"])):
+            r = (step*push_n, step*push_n+push_n)
+            if step*push_n+push_n > len(dataset[part]["messages"]):
+                r[1] = len(dataset[part]["messages"])
+            local_messages = dataset[part]["messages"][r[0]: r[1]]
+            local_functions = dataset[part]["functions"][r[0]: r[1]]
+
+            for feature, value in FORMAT_TO_FUNC[format](local_messages, local_functions).items():
+                converted_dataset[part][feature].extend(value)
+
+            converted_dataset[part] = datasets.Dataset.from_dict(converted_dataset[part])
+            converted_dataset.push_to_hub("evgmaslov/glaive-function-calling-v2-parsed-ru", token="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")
+
+            if r[1] == len(dataset[part]["messages"]):
+                break
+            step += 1
+
     return converted_dataset
