@@ -57,10 +57,14 @@ def value_by_path(d, path):
   return str(el)
 
 def set_value_by_path(d, path, value):
-  el = d
-  for p in path[:-1]:
-    el = el[p]
-  el[path[-1]] = value
+  try:
+    el = d
+    for p in path[:-1]:
+      el = el[p]
+    if type(el) != type("abc"):
+      el[path[-1]] = value
+  except Exception as e:
+    print(f"Catched exception: {e}")
 
 def create_batches(m_texts, batch_size):
   m_text_batches = []
@@ -115,7 +119,7 @@ def convert(messages: List[str], functions: List[str]) -> List[str]:
     p_paths_base = [[i, j, p] for i, f in enumerate(f_dicts_base) for j, d in enumerate(f) for p in paths_to_key(d, "description")]
     p_descriptions = [value_by_path(f_dicts_base[i][j], p) for i, j, p in p_paths_base]
 
-    with open("/content/function_caling/src/utils/data/formats/llama_ru_config.json", "r") as fp:
+    with open("/kaggle/working/function_caling/src/utils/data/formats/llama_ru_config.json", "r") as fp:
         config = json.load(fp)
 
     batch_size = config["batch_size"]
@@ -169,18 +173,18 @@ def convert(messages: List[str], functions: List[str]) -> List[str]:
       if type(f_link) == type({}):
         if "arguments" in f_link:
           set_value_by_path(f_link["arguments"], path[2], text)
-      m_dicts_base[path[0]][path[1]]["content"] = json.dumps(f_link)
+      m_dicts_base[path[0]][path[1]]["content"] = json.dumps(f_link, ensure_ascii=False)
 
     for i in range(len(fr_paths_base)):
       path = fr_paths_base[i]
       text = fr_args_ru[i]
       f_link = json.loads(m_dicts_base[path[0]][path[1]]["content"])
       set_value_by_path(f_link, path[2], text)
-      m_dicts_base[path[0]][path[1]]["content"] = json.dumps(f_link)
+      m_dicts_base[path[0]][path[1]]["content"] = json.dumps(f_link, ensure_ascii=False)
     
     result = {"text":[]}
     for local_messages, local_functions in zip(m_dicts_base, f_dicts_base):
-      tools = ",\n".join([json.dumps(function, indent=4) for function in local_functions])
+      tools = ",\n".join([json.dumps(function, indent=4, ensure_ascii=False) for function in local_functions])
       local_messages[0]["content"] = SYSTEM_PROMPT.format(tools=tools)
       
       messages_string = [S_B, INST_B]
