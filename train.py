@@ -26,12 +26,11 @@ if __name__ == "__main__":
 
     # Load data
     print("Loading data...")
-    hf_dataset = datasets.load_dataset(config["data"]["name"])
     dataset = convert_dataset(
-        dataset=hf_dataset,
+        dataset=config["data"]["name"],
         format=config["data"]["format"],
     )
-    del hf_dataset
+    
     dataset = dataset.map(
         lambda row: tokenizer(row["text"], **config["data"]["tokenizer_args"]),
         batched=True,
