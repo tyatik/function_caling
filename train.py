@@ -1,13 +1,16 @@
 import yaml
 import argparse
+import warnings
+import random
+from collections import defaultdict
 
 import datasets
-import transformers
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import prepare_model_for_kbit_training
-from peft import LoraConfig, get_peft_model
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from trl import SFTTrainer
+from peft import prepare_model_for_kbit_training, LoraConfig
 
-from src.utils.data.formats import convert_dataset
+from src.utils.data.formats import FORMATS_DICT
+from src.callbacks.metrics import LLMMetricsCallback
 
 
 if __name__ == "__main__":
@@ -18,6 +21,9 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
+    if config.get("filter_warnings", False):
+        warnings.filterwarnings("ignore")
+
     # Load model and tokenizer
     print("Loading model and tokenizer...")
     model = AutoModelForCausalLM.from_pretrained(config["model"]["name"], device_map=config["model"]["device"])
@@ -26,34 +32,53 @@ if __name__ == "__main__":
 
     # Load data
     print("Loading data...")
-    hf_dataset = datasets.load_dataset(config["data"]["name"])
-    dataset = convert_dataset(
-        dataset=hf_dataset,
-        format=config["data"]["format"],
+    dataset = datasets.load_dataset(config["data"]["name"])
+
+    # Loss eval samples
+    dataset["test"] = dataset["test"].select(
+        random.sample(
+            range(len(dataset["test"])),
+            config["data"]["loss_eval_samples"]),
     )
-    del hf_dataset
-    dataset = dataset.map(
-        lambda row: tokenizer(row["text"], **config["data"]["tokenizer_args"]),
-        batched=True,
+
+    # Metrics eval samples
+    metrics_samples = dataset["test"].select(
+        random.sample(
+            range(len(dataset["test"])),
+            config["data"]["metrics_eval_samples"]),
     )
-    data_collator = transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False)
+    metrics_samples_formatted = defaultdict(list)
+    for sample in metrics_samples:
+        for key, value in FORMATS_DICT[config["data"]["format"]]["test"](sample).items():
+            metrics_samples_formatted[key].extend(value)
+    metrics_samples_formatted = datasets.Dataset.from_dict(metrics_samples_formatted)
 
     # Init trainer
     lora_config = LoraConfig(**config["model"]["lora_args"])
 
     model.train()
-    model.gradient_checkpointing_enable()
     model = prepare_model_for_kbit_training(model)
-    model = get_peft_model(model, lora_config)
 
-    training_args = transformers.TrainingArguments(**config["training_arguments"])
-    trainer = transformers.Trainer(
+    training_args = TrainingArguments(**config["training_args"])
+    trainer = SFTTrainer(
         model=model,
+        peft_config=lora_config,
+        args=training_args,
         train_dataset=dataset["train"],
         eval_dataset=dataset["test"],
-        args=training_args,
-        data_collator=data_collator,
+        formatting_func=FORMATS_DICT[config["data"]["format"]]["train"],
+        **config["sft_trainer_args"],
     )
+
+    # Add metrics callback
+    wandb_callback = LLMMetricsCallback(
+        trainer,
+        metrics_samples_formatted,
+        tool_call_b=FORMATS_DICT[config["data"]["format"]]["tool_call_b"],
+        tool_call_e=FORMATS_DICT[config["data"]["format"]]["tool_call_e"],
+        **config["metrics_callback"],
+    )
+    trainer.add_callback(wandb_callback)
 
     # Train model
     print("Model training...")

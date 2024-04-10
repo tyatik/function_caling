@@ -5,4 +5,6 @@ optimum
 peft
 torch==2.1
 transformers
+trl
 tqdm
+wandb

@@ -2,18 +2,10 @@ from typing import List, Dict, Any
 import json
 
 SYSTEM_PROMPT = (
-    "You are a helpful assistant with function-calling supported. You are provided with function signatures within <TOOLS></TOOLS> XML tags. "
-    "You may call one or more functions to assist with the user query. Don't make assumptions about what values to plug into functions. "
-    "Here are the available tools:\n"
+    "You are a helpful assistant with function-calling supported. You are provided with function signatures within <TOOLS></TOOLS> XML tags. Use the if required.\n"
     "<TOOLS>\n"
     "{tools}\n"
-    "</TOOLS>\n\n"
-    "For each function call, return a JSON object with the function name and arguments within <TOOL_CALL></TOOL_CALL> XML tags as follows:\n"
-    "<TOOL_CALL>\n"
-    "{{\"name\": <function-name>, \"arguments\": <args-dict>}}\n"
-    "</TOOL_CALL>\n"
-    "You will get function call result within <TOOL_RESPONSE></TOOL_RESPONSE> XML tags. "
-    "Answer user query based on the result."
+    "</TOOLS>"
 )
 
 S_B, S_E = "<s>", "</s>"
@@ -23,33 +15,61 @@ TOOL_CALL_B, TOOL_CALL_E = "<TOOL_CALL>\n", "\n</TOOL_CALL>\n\n"
 TOOL_RESPONSE_B, TOOL_RESPONSE_E = "<TOOL_RESPONSE>\n", "\n</TOOL_RESPONSE>\n\n"
 
 
-def convert(messages: List[Dict[str, Any]], functions: List[str]) -> str:
+def row_to_tokens(row: Dict[str, Any]) -> List[str]:
+    messages = json.loads(row["messages"])
+    functions = json.loads(row["functions"])
+
+    # Customize system prompt
     tools = ",\n".join([json.dumps(function, indent=4) for function in functions])
     messages[0]["content"] = SYSTEM_PROMPT.format(tools=tools)
 
-    messages_string = [S_B, INST_B]
-    for message in messages:
-        if messages_string[-1] == S_E:
-            messages_string.append(S_B)
-            messages_string.append(INST_B)
+    tokens = [INST_B, SYS_B, messages[0]["content"], SYS_E]
+    for i in range(1, len(messages)):
+        if i > 1 and messages[i]["role"] == "user":
+            tokens.extend([S_E, S_B, INST_B])
 
-        if message["role"] == "system":
-            messages_string.append(SYS_B)
-            messages_string.append(message["content"])
-            messages_string.append(SYS_E)
-        elif message["role"] == "user":
-            messages_string.append(message["content"])
-            messages_string.append(INST_E)
+        message = messages[i]
+        if message["role"] == "user":
+            tokens.append(message["content"])
+            tokens.append(INST_E)
         elif message["role"] == "assistant":
-            messages_string.append(message["content"])
-            messages_string.append(S_E)
+            tokens.append(message["content"])
         elif message["role"] == "function_call":
-            messages_string.append(TOOL_CALL_B)
-            messages_string.append(message["content"])
-            messages_string.append(TOOL_CALL_E)
+            tokens.append(TOOL_CALL_B)
+            tokens.append(message["content"])
+            tokens.append(TOOL_CALL_E)
         elif message["role"] == "function_response":
-            messages_string.append(TOOL_RESPONSE_B)
-            messages_string.append(message["content"])
-            messages_string.append(TOOL_RESPONSE_E)
-    
-    return {"text": "".join(messages_string)}
+            tokens.append(TOOL_RESPONSE_B)
+            tokens.append(message["content"])
+            tokens.append(TOOL_RESPONSE_E)
+    tokens.append(S_E)
+
+    return tokens
+
+
+def create_llama_test_prompt(row) -> Dict[str, List[str]]:
+    tokens = row_to_tokens(row)
+
+    result = {
+        "text": [],
+        "text_target": [],
+    }
+
+    l, r = 0, 0
+    for i in range(len(tokens)):
+        if tokens[i] == INST_E:
+            l = i
+        elif tokens[i] == S_E:
+            r = i
+
+            # if l == 0:
+            #     continue
+
+            result["text"].append("".join(tokens[:l+1]))
+            result["text_target"].append("".join(tokens[l+1:r]))
+
+    return result
+
+
+def create_llama_prompt(row: Dict[str, str]) -> str:
+    return "".join(row_to_tokens(row))

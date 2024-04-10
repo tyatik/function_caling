@@ -1,33 +1,23 @@
 import json
-from collections import defaultdict
 
-import datasets
-from tqdm import tqdm
+from .llama import (
+    create_llama_prompt,
+    create_llama_test_prompt,
+    TOOL_CALL_B as LLAMA_TOOL_CALL_B,
+    TOOL_CALL_E as LLAMA_TOOL_CALL_E,
+)
 
-from .llama import convert as llama_convert
-
-FORMAT_TO_FUNC = {
-    "raw": lambda messages, functions: json.dumps({"messages": messages, "functions": functions}),
-    "llama": llama_convert
+FORMATS_DICT = {
+    "raw": {
+        "train": lambda row: json.dumps(row),
+        "test": lambda row: json.dumps(row),
+        "tool_call_b": "<TOOL_CALL>",
+        "tool_call_e": "</TOOL_CALL>",
+    },
+    "llama": {
+        "train": create_llama_prompt,
+        "test": create_llama_test_prompt,
+        "tool_call_b": LLAMA_TOOL_CALL_B,
+        "tool_call_e": LLAMA_TOOL_CALL_E,
+    },
 }
-
-
-def convert_dataset(dataset, format: str):
-    if format not in FORMAT_TO_FUNC:
-        raise ValueError(f"Format must be one of: {list(FORMAT_TO_FUNC.keys())}, got '{format}'")
-
-    # Convert dataset to another format
-    converted_dataset = datasets.DatasetDict()
-    for part in ["train", "test"]:
-        converted_dataset[part] = defaultdict(list)
-
-        for row in tqdm(dataset[part]):
-            messages = json.loads(row["messages"])
-            functions = json.loads(row["functions"])
-
-            for feature, value in FORMAT_TO_FUNC[format](messages, functions).items():
-                converted_dataset[part][feature].append(value)
-        
-        converted_dataset[part] = datasets.Dataset.from_dict(converted_dataset[part])
-    
-    return converted_dataset

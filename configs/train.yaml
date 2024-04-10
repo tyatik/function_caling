@@ -1,32 +1,37 @@
-training_arguments:
-  output_dir: function-calling
+training_args:
+  run_name: llama-7b-1
+  output_dir: results/llama-7b-1
 
-  num_train_epochs: 0.05
+  num_train_epochs: 1.0
   learning_rate: 2.0e-4
   warmup_ratio: 0.05
   weight_decay: 0.01
 
-  # auto_find_batch_size: True
-  per_device_train_batch_size: 1
-  per_device_eval_batch_size: 1
-  gradient_accumulation_steps: 1
-  # gradient_checkpointing: True
-  group_by_length: True
+  per_device_train_batch_size: 8
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 2
+  gradient_checkpointing: False
+  # group_by_length: True
 
+  eval_delay: 0
   evaluation_strategy: steps
-  eval_steps: 10
+  eval_steps: 100
   save_strategy: steps
-  save_steps: 10
+  save_steps: 100
   load_best_model_at_end: True
-  # include_inputs_for_metrics: True
-  report_to: none
+  include_num_input_tokens_seen: True
+  report_to: wandb
 
   fp16: True
   optim: paged_adamw_8bit
 
+sft_trainer_args:
+  packing: True
+  max_seq_length: 2048
+
 model:
-  name: TheBloke/Mistral-7B-Instruct-v0.2-GPTQ
-  device: auto
+  name: meta-llama/Llama-2-7b-chat-hf
+  device: cuda
   tokenizer_args:
     use_fast: True
   lora_args:
@@ -40,7 +45,10 @@ model:
 data:
   name: korotkov/glaive-function-calling-v2-parsed
   format: llama
-  tokenizer_args:
-    return_tensors: np
-    truncation: True
-    max_length: 512
+  loss_eval_samples: 1000
+  metrics_eval_samples: 100
+
+metrics_callback:
+  max_new_tokens: 128
+
+filter_warnings: True
