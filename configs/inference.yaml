@@ -1,0 +1,2 @@
+model_args: 
+  model_name: evgmaslov/Llama-2-7b-hf-fuction-calling-lora
