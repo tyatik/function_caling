@@ -25,5 +25,11 @@ def healthcheck():
 
 @app.get("/send-{message}")
 def chat(message):
-    1
+    answer = AGENT.interract(message)
+    return {"answer":answer}
+
+@app.get("/state")
+def get_state():
+    state = ENVIRONMENT.state
+    return {"state":state}
 

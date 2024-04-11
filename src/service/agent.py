@@ -20,6 +20,17 @@ class Environment():
             """{ "name": "buy_item", "description": "Покупка еды или напитка из меню", "parameters": { "type": "object", "properties": { "name": { "type": "string", "description": "Название позиции из меню, которую нужно приобрести" }}, "required": [ "name" ] } }""",
             """{ "name": "book_table", "description": "Бронирование столика в таверне", "parameters": { "type": "object", "properties": { "number": { "type": "string", "description": "Номер столика, который нужно забронировать" }}, "required": [ "number" ] } }"""
         ]
+
+        self.agent_state = {
+            "balance":0
+        }
+        
+        self.state = {
+            "menu":self.menu,
+            "tables":self.tables,
+            "agent_state":self.agent_state
+        }
+
     def buy_item(self, name: str):
         is_enable = "Нет"
         cost = 0
@@ -116,7 +127,7 @@ class Agent():
         if len(function_call) > 0:
             func_name, func_args = self.parse_function(function_call[0])
         response = getattr(self.env, func_name, self.env.default_func)(**func_args)
-        response = f"<TOOL_RESPONSE>{response}</TOOL_RESPONSE>"
+        response = f"<TOOL_RESPONSE>{json.dumps(response, ensure_ascii=False)}</TOOL_RESPONSE>"
 
         self.history = self.history + response
         answer = self.generate(self.history)
