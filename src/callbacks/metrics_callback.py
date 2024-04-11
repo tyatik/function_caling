@@ -1,5 +1,3 @@
-import json
-
 import wandb
 import torch
 from tqdm import tqdm

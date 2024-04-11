@@ -1,28 +1,29 @@
 training_args:
-  run_name: llama-7b-1
-  output_dir: results/llama-7b-1
+  run_name: saiga-7b-1
+  output_dir: results/saiga-7b-1
 
   num_train_epochs: 1.0
   learning_rate: 2.0e-4
   warmup_ratio: 0.05
   weight_decay: 0.01
 
-  per_device_train_batch_size: 8
-  per_device_eval_batch_size: 8
+  per_device_train_batch_size: 12
+  per_device_eval_batch_size: 12
   gradient_accumulation_steps: 2
   gradient_checkpointing: False
-  # group_by_length: True
 
-  eval_delay: 0
   evaluation_strategy: steps
-  eval_steps: 100
+  eval_steps: 50
   save_strategy: steps
-  save_steps: 100
+  save_steps: 50
+  logging_strategy: steps
+  logging_steps: 50
   load_best_model_at_end: True
   include_num_input_tokens_seen: True
   report_to: wandb
 
   fp16: True
+  fp16_full_eval: True
   optim: paged_adamw_8bit
 
 sft_trainer_args:
@@ -30,8 +31,13 @@ sft_trainer_args:
   max_seq_length: 2048
 
 model:
-  name: meta-llama/Llama-2-7b-chat-hf
-  device: cuda
+  name: IlyaGusev/saiga_7b_lora
+  device: cuda:0
+  quantization_config_args:
+    load_in_4bit: True
+    bnb_4bit_compute_dtype: bfloat16
+    bnb_4bit_quant_type: nf4
+    bnb_4bit_use_double_quant: True
   tokenizer_args:
     use_fast: True
   lora_args:

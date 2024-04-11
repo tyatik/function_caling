@@ -5,12 +5,17 @@ import random
 from collections import defaultdict
 
 import datasets
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TrainingArguments,
+    BitsAndBytesConfig,
+)
 from trl import SFTTrainer
 from peft import prepare_model_for_kbit_training, LoraConfig
 
 from src.utils.data.formats import FORMATS_DICT
-from src.callbacks.metrics import LLMMetricsCallback
+from src.callbacks.metrics_callback import LLMMetricsCallback
 
 
 if __name__ == "__main__":
@@ -26,7 +31,12 @@ if __name__ == "__main__":
 
     # Load model and tokenizer
     print("Loading model and tokenizer...")
-    model = AutoModelForCausalLM.from_pretrained(config["model"]["name"], device_map=config["model"]["device"])
+    quantization_config = BitsAndBytesConfig(**config["model"]["quantization_config_args"])
+    model = AutoModelForCausalLM.from_pretrained(
+        config["model"]["name"],
+        device_map=config["model"]["device"],
+        quantization_config=quantization_config
+    )
     tokenizer = AutoTokenizer.from_pretrained(config["model"]["name"], **config["model"]["tokenizer_args"])
     tokenizer.pad_token = tokenizer.eos_token
 
