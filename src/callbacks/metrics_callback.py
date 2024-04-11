@@ -6,17 +6,12 @@ from tqdm import tqdm
 import transformers
 from transformers.integrations import WandbCallback
 
-
-def get_tool_call(message: str, tool_call_b, tool_call_e) -> dict:
-    if tool_call_b in message:
-        l = message.find(tool_call_b) + len(tool_call_b)
-        r = l + message[l:].find(tool_call_e)
-        if r < l:
-            return {}
-
-        return json.loads(message[l:r].strip())
-    else:
-        return {}
+from src.utils.metrics import (
+    get_tool_call,
+    valid_json_call,
+    correct_call_name,
+    correct_call_args,
+)
 
 
 class LLMMetricsCallback(WandbCallback):
@@ -40,6 +35,7 @@ class LLMMetricsCallback(WandbCallback):
             max_new_tokens=max_new_tokens,
         )
 
+
     def generate(self, prompt):
         tokenized_prompt = self.tokenizer(prompt, return_tensors="pt")["input_ids"].cuda()
 
@@ -48,42 +44,41 @@ class LLMMetricsCallback(WandbCallback):
 
         return self.tokenizer.decode(output[0][len(tokenized_prompt[0]):], skip_special_tokens=False)
 
+
     def samples_table(self, examples):
         records_table = wandb.Table(columns=["prompt", "generation", "target"] + list(self.gen_config.to_dict().keys()))
 
         metrics = {
-            "valid_json_call": len(examples),
+            "valid_json_call": 0,
             "correct_call_name": 0,
             "correct_call_args": 0,
         }
 
         for example in tqdm(examples, leave=False):
-            print(example.keys())
             prompt = example["text"]
             target = example["text_target"]
             generation = self.generate(prompt=prompt)
 
-
             # Add row to table
             records_table.add_data(prompt, generation, target, *list(self.gen_config.to_dict().values()))
-            
+
             # Calculate metrics
             target_function_call = get_tool_call(target, self.tool_call_b, self.tool_call_e)
-            try:
-                generation_function_call = get_tool_call(generation, self.tool_call_b, self.tool_call_e)
-            except json.decoder.JSONDecodeError as e:
-                metrics["valid_json_call"] -= 1
-                generation_function_call = {}
-                continue
+            generation_function_call = get_tool_call(generation, self.tool_call_b, self.tool_call_e)
 
-            metrics["correct_call_name"] += target_function_call.get("name") == generation_function_call.get("name")
-            metrics["correct_call_args"] += target_function_call.get("arguments") == generation_function_call.get("arguments")
+            if valid_json_call(generation, self.tool_call_b, self.tool_call_e):
+                metrics["valid_json_call"] += 1
+            if correct_call_name(target_function_call, generation_function_call):
+                metrics["correct_call_name"] += 1
+            if correct_call_args(target_function_call, generation_function_call):
+                metrics["correct_call_args"] += 1
 
         for metric in metrics:
             metrics[metric] /= len(examples)
 
         return records_table, metrics
-        
+
+
     def on_evaluate(self, args, state, control,  **kwargs):
         super().on_evaluate(args, state, control, **kwargs)
 

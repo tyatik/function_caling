@@ -1,4 +1,3 @@
-auto-gptq
 bitsandbytes
 datasets
 optimum

@@ -1,0 +1,22 @@
+model:
+  base_model_name: NousResearch/Llama-2-7b-chat-hf
+  adapter_model_name: korotkov/Llama-2-7b-chat-hf-function-calling
+  device: cuda:0
+  quantization_config_args:
+    load_in_4bit: True
+    bnb_4bit_compute_dtype: bfloat16
+    bnb_4bit_quant_type: nf4
+    bnb_4bit_use_double_quant: True
+  tokenizer_args:
+    use_fast: True
+
+generation:
+  max_new_tokens: 256
+  stopwords: ["</s>", "</TOOL_CALL>"]
+
+data:
+  name: korotkov/glaive-function-calling-v2-parsed
+  format: llama
+  num_samples: 100
+
+filter_warnings: True

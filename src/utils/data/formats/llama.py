@@ -2,13 +2,13 @@ from typing import List, Dict, Any
 import json
 
 SYSTEM_PROMPT = (
-    "You are a helpful assistant with function-calling supported. You are provided with function signatures within <TOOLS></TOOLS> XML tags. Use the if required.\n"
+    "You are a helpful assistant with function-calling supported. You are provided with function signatures within <TOOLS></TOOLS> XML tags. Use them if required.\n"
     "<TOOLS>\n"
     "{tools}\n"
     "</TOOLS>"
 )
 
-S_B, S_E = "<s>", "</s>"
+S_B, S_E = " <s> ", " </s>"
 INST_B, INST_E = "[INST] ", " [/INST] "
 SYS_B, SYS_E = "<<SYS>>\n", "\n<</SYS>>\n\n"
 TOOL_CALL_B, TOOL_CALL_E = "<TOOL_CALL>\n", "\n</TOOL_CALL>\n\n"
@@ -42,7 +42,6 @@ def row_to_tokens(row: Dict[str, Any]) -> List[str]:
             tokens.append(TOOL_RESPONSE_B)
             tokens.append(message["content"])
             tokens.append(TOOL_RESPONSE_E)
-    tokens.append(S_E)
 
     return tokens
 
